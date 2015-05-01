@@ -41,7 +41,7 @@ NotifyNotification *NotificationInit(char *streamer)
 
 void SendTwitchNotification(NotifyNotification *n, char *streamer, char *game)
 {
-    char message[100];
+	char message[100];
 	sprintf(message, "%s is online.\nPlaying: %s", streamer, game ? game : "");
 
 	notify_notification_update(n, "Twitch Notify", message, NULL);
@@ -217,7 +217,7 @@ int main(int argc, char **argv)
 	pid_t pid, sid;
 	pid = fork();
 	if (pid < 0) TwitchNotifyExit("Program forking failed.", statuscurl, gamecurl);
-	else if (pid > 0) exit(1);
+	else if (pid > 0) exit(0);
 
 	umask(0);
 	sid = setsid();
