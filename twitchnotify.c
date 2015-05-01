@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <curl/curl.h>
 #include <libnotify/notify.h>
+#include <gdk-pixbuf/gdk-pixbuf.h>
 
 #define STREAM_OFFLINE  0
 #define STREAM_ONLINE   1
@@ -35,6 +36,14 @@ NotifyNotification *NotificationInit(char *streamer)
 
 	// Will stay up until clicked off
 	notify_notification_set_timeout(n, NOTIFY_EXPIRES_NEVER);
+
+	GdkPixbuf *icon = gdk_pixbuf_new_from_file(
+		"/usr/share/twitchnotify/GlitchIcon_purple.png", 
+		NULL);
+
+	if (icon) {
+		notify_notification_set_image_from_pixbuf(n, icon);
+	}
 
 	return n;
 }
