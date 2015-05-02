@@ -96,13 +96,15 @@ size_t FindGame(void *ptr, size_t size, size_t nmemb, void *game)
 	char **entries = (char **)malloc(35 * sizeof(char *));
 	if (!entries) TwitchNotifyExit("Memory allocation failure.", NULL, NULL);
 
-	char *token = strtok((char *)ptr, ",");
 	int i;
+	for (i = 0; i < 35; i++) entries[i] = NULL;
+	
+	char *token = strtok((char *)ptr, ",");
 	for (i = 0; token && i < 35; i++) {
 		entries[i] = (char *)calloc(strlen(token) + 1, sizeof(char));
 		if (!entries[i]) TwitchNotifyExit("Memory allocation failure.", NULL, NULL);
 		
-		strcpy(entries[i], token);
+		strncpy(entries[i], token, strlen(token) + 1);
 		token = strtok(NULL, ",");
 	}
 
@@ -113,7 +115,7 @@ size_t FindGame(void *ptr, size_t size, size_t nmemb, void *game)
 		if (token && !strcmp(token, "\"game\"")) {
 			token = strtok(NULL, ":");
 			if (token) {
-				strncpy((char *)game, token, strlen(token));
+				strncpy((char *)game, token, strlen(token) + 1);
 				break;
 			}
 		}
