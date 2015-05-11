@@ -219,11 +219,12 @@ int main(int argc, char **argv)
 	if (STREAM_STATUS == STREAM_ONLINE) {
 		game = CurrentGame(gamecurl);
 		printf("%s is online playing %s!\n", streamer, game ? game : "");
+		SendTwitchNotification(n, streamer, game);
 		if (game) free(game);
 		game = NULL;
 	}
 	
-	printf("\nForking to background...\n\n");
+	printf("\nForking to background...\n");
 	
 	pid_t pid, sid;
 	pid = fork();
