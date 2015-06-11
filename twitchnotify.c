@@ -241,12 +241,14 @@ int main(int argc, char **argv)
 	close(STDOUT_FILENO);
 	close(STDERR_FILENO);
 
+	int status = STREAM_OFFLINE;
+	
 	// Only sends notification on the rising offline->online transition
 	// Checks every 30 seconds
 	while (1) {
-
-		if (StreamIsOnline(statuscurl) &&
-			STREAM_STATUS == STREAM_OFFLINE)
+		status = StreamIsOnline(statuscurl);
+		
+		if (status && STREAM_STATUS == STREAM_OFFLINE)
 		{
 			game = CurrentGame(gamecurl);
 			SendTwitchNotification(n, streamer, game);
@@ -256,8 +258,7 @@ int main(int argc, char **argv)
 			STREAM_STATUS = STREAM_ONLINE;
 		}
 
-		else if (!StreamIsOnline(statuscurl) &&
-				   STREAM_STATUS == STREAM_ONLINE)
+		else if (!status && STREAM_STATUS == STREAM_ONLINE)
 		{
 			STREAM_STATUS = STREAM_OFFLINE;
 		}
