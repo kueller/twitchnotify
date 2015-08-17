@@ -232,7 +232,8 @@ void send_twitch_notification(NotifyNotification *n, Stream s)
 
 int main(int argc, char **argv)
 {
-	if (argc < 2) twitch_notify_exit("Need arguments!");
+	if (argc < 2) twitch_notify_exit("Need arguments!\n"
+									 "Try using the --help option.");
 	
 	if (!strcmp(argv[1], "--help")) {
 		printf("Usage: twitchnotify [OPTION] [STREAMERS]\n\n"
@@ -248,17 +249,13 @@ int main(int argc, char **argv)
 
 	int i;
 	for (i = 1; i < argc; i++) {
-		if (!is_a_letter(argv[i][0])) {
-			if (!strcmp(argv[i], "--no-daemon"))
-				daemonize = 0;
-		}
-	}
-
-	for (i = 1; i < argc; i++) {
 		if (is_a_letter(argv[i][0])) {
 			printf("Starting Twitch Notify for %s...\n", argv[i]);
 			stream_list[stream_count] = stream_init(argv[i]);
 			stream_count++;
+		} else {
+			if (!strcmp(argv[i], "--no-daemon"))
+				daemonize = 0;
 		}
 	}
 
@@ -273,10 +270,9 @@ int main(int argc, char **argv)
 
 		stream_list[i]->status = stream_is_online(stream_list[i]);
 		if (stream_list[i]->status == STREAM_ONLINE) {
-			get_current_game(stream_list[i]);
+			send_twitch_notification(note, stream_list[i]);
 			printf("%s is online playing %s!\n", stream_list[i]->name,
 				   strlen(stream_list[i]->game) ? stream_list[i]->game : "");
-			send_twitch_notification(note, stream_list[i]);
 		}
 	}
 	
