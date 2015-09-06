@@ -19,6 +19,8 @@ struct stream {
 	CURL *statcurl;
 	CURL *gamecurl;
 
+	NotifyNotification *note;
+
 	int status;
 };
 
@@ -212,13 +214,15 @@ Stream stream_init(char *streamer)
 	s->name   = streamer;
 	s->status = STREAM_OFFLINE;
 
+	s->note = notification_init();
+
 	s->statcurl = status_request_init(s->name);
 	s->gamecurl = game_request_init(s->name);
 
 	return s;
 }
 
-void send_twitch_notification(NotifyNotification *n, Stream s)
+void send_twitch_notification(Stream s)
 {
 	get_current_game(s);
 
@@ -226,8 +230,8 @@ void send_twitch_notification(NotifyNotification *n, Stream s)
 	sprintf(message, "%s is online.\nPlaying: %s",
 			s->name, strlen(s->game) ? s->game : "");
 
-	notify_notification_update(n, "Twitch Notify", message, NULL);
-	notify_notification_show(n, NULL);
+	notify_notification_update(s->note, "Twitch Notify", message, NULL);
+	notify_notification_show(s->note, NULL);
 }
 
 int main(int argc, char **argv)
@@ -262,15 +266,13 @@ int main(int argc, char **argv)
 	if (stream_count < 1) twitch_notify_exit("Need stream name!");
 	putchar('\n');
 
-	NotifyNotification *note = notification_init();
-
 	printf("Getting initial statuses...\n");
 
 	for (i = 0; i < stream_count; i++) {
 
 		stream_list[i]->status = stream_is_online(stream_list[i]);
 		if (stream_list[i]->status == STREAM_ONLINE) {
-			send_twitch_notification(note, stream_list[i]);
+			send_twitch_notification(stream_list[i]);
 			printf("%s is online playing %s!\n", stream_list[i]->name,
 				   strlen(stream_list[i]->game) ? stream_list[i]->game : "");
 		}
@@ -309,7 +311,7 @@ int main(int argc, char **argv)
 
 			if (newstat == STREAM_ONLINE && current->status == STREAM_OFFLINE)
 			{
-				send_twitch_notification(note, current);
+				send_twitch_notification(current);
 				current->status = STREAM_ONLINE;
 			}
 
@@ -318,7 +320,7 @@ int main(int argc, char **argv)
 				current->status = STREAM_OFFLINE;
 			}
 		}
-		
+
 		sleep(30);
 	}
 
