@@ -8,9 +8,15 @@
 #include <libnotify/notify.h>
 #include <gdk-pixbuf/gdk-pixbuf.h>
 
-#define STREAM_OFFLINE  0
-#define STREAM_ONLINE   1
-#define STREAM_404     -1
+#define STREAM_OFFLINE        0
+#define STREAM_ONLINE         1
+#define STREAM_404           -1
+
+#define NODAEMON_FLAG     0b001
+#define BROWSER_FLAG      0b010
+#define LIVESTREAMER_FLAG 0b100
+
+#define COUNT_BUFFER 4
 
 struct stream {
 	char *name;
@@ -22,6 +28,7 @@ struct stream {
 	NotifyNotification *note;
 
 	int status;
+	int count;
 };
 
 typedef struct stream* Stream;
@@ -40,7 +47,8 @@ int is_a_letter(char c)
 }
 
 // status is a pointer to an int that will hold the stream's new status
-// Callback for StreamIsOnline()
+// Callback for stream_is_online()
+// I can't into string parsing in C
 size_t check_stream(void *ptr, size_t size, size_t nmemb, void *status)
 {
 	char *token = strtok((char *)ptr, ",");
@@ -72,7 +80,7 @@ size_t check_stream(void *ptr, size_t size, size_t nmemb, void *status)
 }
 
 // Returns the game currently being played, as a string, into the game variable
-// Callback for CurrentGame()
+// Callback for current_game()
 size_t find_game(void *ptr, size_t size, size_t nmemb, void *game)
 {
 	int i = 0;
@@ -117,6 +125,31 @@ size_t find_game(void *ptr, size_t size, size_t nmemb, void *game)
 
 	return size * nmemb;
 }
+
+// Callback functions for calling system() to open in browser or livestreamer.
+// These don't work when running as a daemon for some reason.
+void notify_open_browser(NotifyNotification *n, const char *action,
+						 gpointer user_data)
+{
+	Stream stream = (Stream)user_data;
+	
+	char command[100];
+	sprintf(command, "xdg-open http://www.twitch.tv/%s", stream->name);
+	
+	system(command);
+}
+
+void notify_open_livestreamer(NotifyNotification *n, const char *action,
+							  gpointer user_data)
+{
+	Stream stream = (Stream)user_data;
+	
+	char command[200];
+	sprintf(command, "livestreamer http://www.twitch.tv/%s best &",
+			stream->name);
+
+	system(command);
+}
 	
 int stream_is_online(Stream s)
 {
@@ -139,7 +172,7 @@ int stream_is_online(Stream s)
 	return status;
 }
 
-// Returns allocated string, needs to be freed after.
+// Puts the current game (if any) into the "game" variable in a Stream.
 void get_current_game(Stream s)
 {
 	int i;
@@ -151,6 +184,27 @@ void get_current_game(Stream s)
 
 	res = curl_easy_perform(s->gamecurl);
 	if (res != CURLE_OK) return;
+}
+
+// Sets the GTK notification action buttons.
+void set_notification_actions(Stream s, int options)
+{
+	if (!s) return;
+	if (options == 0) return;
+
+	if (options & LIVESTREAMER_FLAG) {
+		notify_notification_add_action(s->note, "livestr-open",
+									   "Open with livestreamer",
+									   NOTIFY_ACTION_CALLBACK(notify_open_livestreamer),
+									   s, NULL);
+	}
+
+	if (options & BROWSER_FLAG) {
+		notify_notification_add_action(s->note, "browser-open",
+									   "Open in browser",
+									   NOTIFY_ACTION_CALLBACK(notify_open_browser),
+									   s, NULL);
+	}
 }
 
 NotifyNotification *notification_init()
@@ -213,7 +267,8 @@ Stream stream_init(char *streamer)
 
 	s->name   = streamer;
 	s->status = STREAM_OFFLINE;
-
+	s->count  = 0;
+	
 	s->note = notification_init();
 
 	s->statcurl = status_request_init(s->name);
@@ -234,6 +289,44 @@ void send_twitch_notification(Stream s)
 	notify_notification_show(s->note, NULL);
 }
 
+// Callback function. Called every 15 seconds.
+// Notification is sent if a stream is online for 3 passes.
+// Similarly, status changes to offline is stream is offline for 3 passes.
+gboolean check_all_streams(gpointer user_data)
+{
+	int newstat = STREAM_OFFLINE;
+	int i;
+
+	Stream *stream_list = (Stream *)user_data;
+	for (i = 0; stream_list[i]; i++) {
+		Stream current = stream_list[i];
+
+		newstat = stream_is_online(current);
+
+		if (newstat == STREAM_ONLINE && current->status == STREAM_OFFLINE) {
+			if (current->count == COUNT_BUFFER) {
+				send_twitch_notification(current);
+				current->status = STREAM_ONLINE;
+				current->count = 0;
+			} else if (current->count < 3) {
+				current->count++;
+			}
+		} else if (newstat == STREAM_OFFLINE &&
+				   current->status == STREAM_ONLINE) {
+			if (current->count == COUNT_BUFFER) {
+				current->status = STREAM_OFFLINE;
+				current->count = 0;
+			} else if (current->count < 3) {
+				current->count++;
+			}
+		} else if (newstat == current->status) {
+			current->count = 0;
+		}		
+	}
+
+	return TRUE;
+}	
+
 int main(int argc, char **argv)
 {
 	if (argc < 2) twitch_notify_exit("Need arguments!\n"
@@ -242,16 +335,35 @@ int main(int argc, char **argv)
 	if (!strcmp(argv[1], "--help")) {
 		printf("Usage: twitchnotify [OPTION] [STREAMERS]\n\n"
 			   "Pass in a list of streamer you would like to keep track of.\n"
-			   "Use --no-daemon to prevent forking to background.\n\n");
+			   "Allows for up to 100 different streams.\n"
+			   "Use --no-daemon to prevent from forking.\n\n"
+			   "You can try --browser and --livestreamer options to get\n"
+			   "buttons in the notification bubble. These do not work when\n"
+			   "the program is run as a daemon though, so consider it\n"
+			   "experimental for now.\n\n");
+			   /*
+			   "Options:\n"
+			   "   --no-daemon\n"
+			   "   Prevents from forking to the background.\n\n"
+			   "   --browser\n"
+			   "   Adds option to open stream in default browser.\n\n"
+			   "   --livestreamer\n"
+			   "   Adds option to open with livestreamer.\n"
+			   "   Uses \"best\" quality option only, for now.\n\n");
+			   */
 		exit(0);
 	}
-	
-	int daemonize    = 1;
+
+	GMainLoop *loop = g_main_loop_new(NULL, FALSE);
+
+	int options      = 0b0;
 	int stream_count = 0;
 	
 	Stream stream_list[100];
 
 	int i;
+	for (i = 0; i < 100; i++) stream_list[i] = NULL;
+
 	for (i = 1; i < argc; i++) {
 		if (is_a_letter(argv[i][0])) {
 			printf("Starting Twitch Notify for %s...\n", argv[i]);
@@ -259,7 +371,11 @@ int main(int argc, char **argv)
 			stream_count++;
 		} else {
 			if (!strcmp(argv[i], "--no-daemon"))
-				daemonize = 0;
+				options |= NODAEMON_FLAG;
+			else if (!strcmp(argv[i], "--browser"))
+				options |= BROWSER_FLAG;
+			else if (!strcmp(argv[i], "--livestreamer"))
+				options |= LIVESTREAMER_FLAG;
 		}
 	}
 
@@ -269,7 +385,8 @@ int main(int argc, char **argv)
 	printf("Getting initial statuses...\n");
 
 	for (i = 0; i < stream_count; i++) {
-
+		set_notification_actions(stream_list[i], options);
+		
 		stream_list[i]->status = stream_is_online(stream_list[i]);
 		if (stream_list[i]->status == STREAM_ONLINE) {
 			send_twitch_notification(stream_list[i]);
@@ -277,10 +394,10 @@ int main(int argc, char **argv)
 				   strlen(stream_list[i]->game) ? stream_list[i]->game : "");
 		}
 	}
-	
+
 	putchar('\n');
 
-	if (daemonize) {
+	if (!(options & NODAEMON_FLAG)) {
 		printf("Forking to background...\n");
 
 		pid_t pid, sid;
@@ -299,30 +416,9 @@ int main(int argc, char **argv)
 		close(STDERR_FILENO);
 	}
 
-	int newstat = STREAM_OFFLINE;
-	
-	// Only sends notification on the rising offline->online transition
-	// Checks every 30 seconds
-	while (1) {
-		for (i = 0; i < stream_count; i++) {
-			Stream current = stream_list[i];
-
-			newstat = stream_is_online(current);
-
-			if (newstat == STREAM_ONLINE && current->status == STREAM_OFFLINE)
-			{
-				send_twitch_notification(current);
-				current->status = STREAM_ONLINE;
-			}
-
-			else if (newstat == STREAM_OFFLINE && current->status == STREAM_ONLINE)
-			{
-				current->status = STREAM_OFFLINE;
-			}
-		}
-
-		sleep(30);
-	}
+	printf("Starting loop\n");
+	g_timeout_add_seconds(30, check_all_streams, stream_list);
+	g_main_loop_run(loop);
 
 	return 0;
 }
