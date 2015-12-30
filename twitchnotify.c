@@ -65,7 +65,7 @@ size_t check_stream(void *ptr, size_t size, size_t nmemb, void *status)
 					token[i] = '\0';
 			}
 
-			if (!strcmp(token, "\"stream\":null")) {
+			if (!strcmp(token, "{\"stream\":null")) {
 				*(int *)status = STREAM_OFFLINE;
 				break;
 			} else {
@@ -165,7 +165,6 @@ int stream_is_online(Stream s)
 	if (res != CURLE_OK) return STREAM_OFFLINE;
 	
 	if (status == STREAM_404) {
-		fprintf(stderr, "Stream: %s\n", s->name);
 		twitch_notify_exit("Invalid stream name.");
 	}
 
@@ -234,7 +233,7 @@ CURL *status_request_init(char *streamer)
 	CURL *c = curl_easy_init();
 	if (!c) twitch_notify_exit("Failed to initialize URL object.");
 
-	char url[50];
+	char url[70];
 	sprintf(url, "https://api.twitch.tv/kraken/streams/%s", streamer);
 
 	curl_easy_setopt(c, CURLOPT_URL, url);
@@ -248,7 +247,7 @@ CURL *game_request_init(char *streamer)
 	CURL *c = curl_easy_init();
 	if (!c) twitch_notify_exit("Failed to initialize URL object.");
 
-	char url[50];
+	char url[70];
 	sprintf(url, "https://api.twitch.tv/kraken/channels/%s", streamer);
 
 	curl_easy_setopt(c, CURLOPT_URL, url);
@@ -308,7 +307,7 @@ gboolean check_all_streams(gpointer user_data)
 				send_twitch_notification(current);
 				current->status = STREAM_ONLINE;
 				current->count = 0;
-			} else if (current->count < 3) {
+			} else if (current->count < COUNT_BUFFER) {
 				current->count++;
 			}
 		} else if (newstat == STREAM_OFFLINE &&
@@ -316,12 +315,12 @@ gboolean check_all_streams(gpointer user_data)
 			if (current->count == COUNT_BUFFER) {
 				current->status = STREAM_OFFLINE;
 				current->count = 0;
-			} else if (current->count < 3) {
+			} else if (current->count < COUNT_BUFFER) {
 				current->count++;
 			}
 		} else if (newstat == current->status) {
 			current->count = 0;
-		}		
+		}
 	}
 
 	return TRUE;
@@ -368,6 +367,7 @@ int main(int argc, char **argv)
 		if (is_a_letter(argv[i][0])) {
 			printf("Starting Twitch Notify for %s...\n", argv[i]);
 			stream_list[stream_count] = stream_init(argv[i]);
+			stream_is_online(stream_list[stream_count]);
 			stream_count++;
 		} else {
 			if (!strcmp(argv[i], "--no-daemon"))
@@ -381,20 +381,6 @@ int main(int argc, char **argv)
 
 	if (stream_count < 1) twitch_notify_exit("Need stream name!");
 	putchar('\n');
-
-	printf("Getting initial statuses...\n");
-
-	for (i = 0; i < stream_count; i++) {
-		set_notification_actions(stream_list[i], options);
-		
-		stream_list[i]->status = stream_is_online(stream_list[i]);
-		if (stream_list[i]->status == STREAM_ONLINE) {
-			send_twitch_notification(stream_list[i]);
-			printf("%s is online playing %s!\n", stream_list[i]->name,
-				   strlen(stream_list[i]->game) ? stream_list[i]->game : "");
-		}
-	}
-
 	putchar('\n');
 
 	if (!(options & NODAEMON_FLAG)) {
@@ -417,7 +403,8 @@ int main(int argc, char **argv)
 	}
 
 	printf("Starting loop\n");
-	g_timeout_add_seconds(30, check_all_streams, stream_list);
+
+	g_timeout_add_seconds(10, check_all_streams, stream_list);
 	g_main_loop_run(loop);
 
 	return 0;

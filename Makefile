@@ -8,7 +8,7 @@ OBJ    = ${SRC:.c=.o}
 all: ${BINARY}
 
 ${BINARY}:
-	${CC} ${CFLAGS} `${CONFIG}` ${SOURCE} -o ${BINARY}
+	${CC} ${SOURCE} -o ${BINARY} ${CFLAGS} `${CONFIG}`
 
 install: ${BINARY}
 	cp ${BINARY} /usr/bin
