@@ -79,6 +79,48 @@ size_t check_stream(void *ptr, size_t size, size_t nmemb, void *status)
 	return size * nmemb;
 }
 
+// Finds the display_name of a streamer and copies it to "name"
+// Does searching by iteration rather than parsing.
+// Inspired by jsmn.
+size_t find_display_name(void *ptr, size_t size, size_t nmemb, void *name)
+{
+	char *object = (char *)ptr;
+	int start_p = 0; // Search pointer
+	int q_length = 12; // strlen("display_name")
+
+	int found = 0;
+
+	char tmp[q_length + 1];
+	int tmp_i = 0;
+
+	int i;
+	for (i = 0; i < strlen(object) - q_length; i++) {
+		if (object[i] == 'd' && object[i + 1] == 'i') {
+			for (start_p = i, tmp_i = 0; start_p < i + q_length; start_p++, tmp_i++)
+				tmp[tmp_i] = object[start_p];
+			if (!strncmp(tmp, "display_name", q_length)) {
+				found = 1;
+				start_p = i + q_length + 2;
+				break;
+			}
+		}
+	}
+
+	if (found) {
+		for (; object[start_p] != '\"'; start_p++);
+		start_p++;
+
+		i = 0;
+		while (object[start_p] != '\"') {
+			((char *)name)[i] = object[start_p];
+			i++;
+			start_p++;
+		}
+	}
+	
+	return size * nmemb;
+}
+
 // Returns the game currently being played, as a string, into the game variable
 // Callback for current_game()
 size_t find_game(void *ptr, size_t size, size_t nmemb, void *game)
@@ -171,6 +213,29 @@ int stream_is_online(Stream s)
 	return status;
 }
 
+// Called by stream_init. Returns a memory allocated string with
+// the display_name of the streamer.
+char *get_display_name(CURL *c)
+{
+	char *name = calloc(26, sizeof(char));
+	if (!name) twitch_notify_exit("Memory allocation failure.");
+	
+	CURLcode res;
+	res = curl_easy_setopt(c, CURLOPT_WRITEDATA, name);
+	if (res != CURLE_OK) {
+		free(name);
+		return NULL;
+	}
+
+	res = curl_easy_perform(c);
+	if (res != CURLE_OK) {
+		free(name);
+		return NULL;
+	}
+
+	return name;
+}
+
 // Puts the current game (if any) into the "game" variable in a Stream.
 void get_current_game(Stream s)
 {
@@ -242,6 +307,20 @@ CURL *status_request_init(char *streamer)
 	return c;
 }
 
+CURL *display_name_init(char *streamer)
+{
+	CURL *c = curl_easy_init();
+	if (!c) twitch_notify_exit("Failed to initialize URL object.");
+
+	char url[70];
+	sprintf(url, "https://api.twitch.tv/kraken/channels/%s", streamer);
+
+	curl_easy_setopt(c, CURLOPT_URL, url);
+	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, find_display_name);
+
+	return c;
+}
+
 CURL *game_request_init(char *streamer)
 {
 	CURL *c = curl_easy_init();
@@ -264,7 +343,9 @@ Stream stream_init(char *streamer)
 	s->game = (char *)calloc(50, sizeof(char));
 	if (!s->game) twitch_notify_exit("Memory allocation error");
 
-	s->name   = streamer;
+	CURL *d = display_name_init(streamer);
+
+	s->name   = get_display_name(d);
 	s->status = STREAM_OFFLINE;
 	s->count  = 0;
 	
@@ -272,6 +353,8 @@ Stream stream_init(char *streamer)
 
 	s->statcurl = status_request_init(s->name);
 	s->gamecurl = game_request_init(s->name);
+
+	curl_easy_cleanup(d);
 
 	return s;
 }
@@ -380,7 +463,7 @@ int main(int argc, char **argv)
 	}
 
 	if (stream_count < 1) twitch_notify_exit("Need stream name!");
-	putchar('\n');
+
 	putchar('\n');
 
 	if (!(options & NODAEMON_FLAG)) {
