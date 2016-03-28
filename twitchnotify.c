@@ -14,7 +14,6 @@
 
 #define NODAEMON_FLAG     0b001
 #define BROWSER_FLAG      0b010
-#define LIVESTREAMER_FLAG 0b100
 
 #define COUNT_BUFFER 4
 
@@ -181,18 +180,7 @@ void notify_open_browser(NotifyNotification *n, const char *action,
 	system(command);
 }
 
-void notify_open_livestreamer(NotifyNotification *n, const char *action,
-							  gpointer user_data)
-{
-	Stream stream = (Stream)user_data;
-	
-	char command[200];
-	sprintf(command, "livestreamer http://www.twitch.tv/%s best &",
-			stream->name);
-
-	system(command);
-}
-	
+// Checks if stream is online.
 int stream_is_online(Stream s)
 {
 	int status;
@@ -255,13 +243,6 @@ void set_notification_actions(Stream s, int options)
 {
 	if (!s) return;
 	if (options == 0) return;
-
-	if (options & LIVESTREAMER_FLAG) {
-		notify_notification_add_action(s->note, "livestr-open",
-									   "Open with livestreamer",
-									   NOTIFY_ACTION_CALLBACK(notify_open_livestreamer),
-									   s, NULL);
-	}
 
 	if (options & BROWSER_FLAG) {
 		notify_notification_add_action(s->note, "browser-open",
@@ -457,8 +438,6 @@ int main(int argc, char **argv)
 				options |= NODAEMON_FLAG;
 			else if (!strcmp(argv[i], "--browser"))
 				options |= BROWSER_FLAG;
-			else if (!strcmp(argv[i], "--livestreamer"))
-				options |= LIVESTREAMER_FLAG;
 		}
 	}
 
