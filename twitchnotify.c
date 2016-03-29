@@ -115,6 +115,8 @@ size_t find_display_name(void *ptr, size_t size, size_t nmemb, void *name)
 			i++;
 			start_p++;
 		}
+	} else {
+		(char *)name = "\"\"";
 	}
 	
 	return size * nmemb;
@@ -122,6 +124,8 @@ size_t find_display_name(void *ptr, size_t size, size_t nmemb, void *name)
 
 // Returns the game currently being played, as a string, into the game variable
 // Callback for current_game()
+// Finding the word "game" is much more prone to failure, so more complex
+// parsing is used.
 size_t find_game(void *ptr, size_t size, size_t nmemb, void *game)
 {
 	int i = 0;
