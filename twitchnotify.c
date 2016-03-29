@@ -116,7 +116,7 @@ size_t find_display_name(void *ptr, size_t size, size_t nmemb, void *name)
 			start_p++;
 		}
 	} else {
-		(char *)name = "\"\"";
+		name = "\"\"";
 	}
 	
 	return size * nmemb;
