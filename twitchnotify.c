@@ -32,6 +32,9 @@ struct stream {
 
 typedef struct stream* Stream;
 
+CURL *status_request_init(char *streamer);
+CURL *game_request_init(char *streamer);
+	
 void twitch_notify_exit(char *errormsg)
 {
 	fprintf(stderr, "Error: %s\n\n", errormsg);
@@ -202,6 +205,10 @@ int stream_is_online(Stream s)
 		twitch_notify_exit("Invalid stream name.");
 	}
 
+	// Bypass a memory leak/high usage that seems to be present.
+	curl_easy_cleanup(s->statcurl);
+	s->statcurl = status_request_init(s->name);
+	
 	return status;
 }
 
@@ -240,6 +247,9 @@ void get_current_game(Stream s)
 
 	res = curl_easy_perform(s->gamecurl);
 	if (res != CURLE_OK) return;
+
+	curl_easy_cleanup(s->gamecurl);
+	s->gamecurl = game_request_init(s->name);
 }
 
 // Sets the GTK notification action buttons.
