@@ -17,6 +17,11 @@
 
 #define COUNT_BUFFER 4
 
+#define URL_LEN 140
+
+// From youtube-dl, which was taken from another program
+#define CLIENT_ID "jzkbprff40iqj646a697cyrvl0zt2m6"
+
 struct stream {
 	char *name;
 	char *game;
@@ -293,8 +298,9 @@ CURL *status_request_init(char *streamer)
 	CURL *c = curl_easy_init();
 	if (!c) twitch_notify_exit("Failed to initialize URL object.");
 
-	char url[70];
-	sprintf(url, "https://api.twitch.tv/kraken/streams/%s", streamer);
+	char url[URL_LEN];
+	sprintf(url, "https://api.twitch.tv/kraken/streams/%s?client_id=%s",
+			streamer, CLIENT_ID);
 
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, check_stream);
@@ -307,8 +313,10 @@ CURL *display_name_init(char *streamer)
 	CURL *c = curl_easy_init();
 	if (!c) twitch_notify_exit("Failed to initialize URL object.");
 
-	char url[70];
-	sprintf(url, "https://api.twitch.tv/kraken/channels/%s", streamer);
+	char url[URL_LEN];
+	sprintf(url, "https://api.twitch.tv/kraken/channels/%s"
+			"?client_id=%s&scope=channel_read",
+			streamer, CLIENT_ID);
 
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, find_display_name);
@@ -321,8 +329,10 @@ CURL *game_request_init(char *streamer)
 	CURL *c = curl_easy_init();
 	if (!c) twitch_notify_exit("Failed to initialize URL object.");
 
-	char url[70];
-	sprintf(url, "https://api.twitch.tv/kraken/channels/%s", streamer);
+	char url[URL_LEN];
+	sprintf(url, "https://api.twitch.tv/kraken/channels/%s"
+			"?client_id=%s&scope=channel_read",
+			streamer, CLIENT_ID);
 
 	curl_easy_setopt(c, CURLOPT_URL, url);
 	curl_easy_setopt(c, CURLOPT_WRITEFUNCTION, find_game);
